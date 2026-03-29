@@ -2,12 +2,9 @@ import { createServer } from "http";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-
-// ✅ correct modern import
 import * as wisp from "@mercuryworkshop/wisp-js/server";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -18,7 +15,7 @@ app.use(express.static(join(__dirname, "public")));
 app.use(
   "/scramjet/",
   express.static(
-    join(__dirname, "node_modules/@mercuryworkshop/scramjet/dist")
+    join(__dirname, "node_modules/@mercuryworkshop/scramjet")
   )
 );
 
@@ -41,11 +38,10 @@ app.use(
 // ── HTTP server ────────────────────────────────
 const server = createServer(app);
 
-// ── ✅ Wisp WebSocket handler (FIXED) ───────────
+// ── Wisp WebSocket handler ───────────────────────
 server.on("upgrade", (req, socket, head) => {
   if (req.url.startsWith("/wisp/")) {
-    // ✅ modern usage: call wisp directly
-    wisp(req, socket, head);
+    wisp.routeRequest(req, socket, head);
   } else {
     socket.destroy();
   }
