@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { join, dirname } from "path";
 
 // ✅ correct modern import
-import wisp from "@mercuryworkshop/wisp-js/server";
+import * as wisp from "@mercuryworkshop/wisp-js/server";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
