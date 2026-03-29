@@ -3,7 +3,7 @@ import { createRequire } from "module";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-import wisp from "@mercuryworkshop/wisp-js/server";
+import { routeRequest } from "@mercuryworkshop/wisp-js/server";
 
 const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ const server = createServer(app);
 // ── Wisp WebSocket handler (replaces bare server) ─────────
 server.on("upgrade", (req, socket, head) => {
   if (req.url.startsWith("/wisp/")) {
-    wisp.routeRequest(req, socket, head);
+    routeRequest(req, socket, head);
   } else {
     socket.end();
   }
