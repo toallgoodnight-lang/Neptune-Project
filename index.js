@@ -2,6 +2,7 @@ import { createServer } from "http";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
+import { readdirSync } from "fs";
 import * as wisp from "@mercuryworkshop/wisp-js/server";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ app.use(express.static(join(__dirname, "public")));
 app.use(
   "/scramjet/",
   express.static(
-    join(__dirname, "node_modules/@mercuryworkshop/scramjet")
+    join(__dirname, "node_modules/@mercuryworkshop/scramjet/dist")
   )
 );
 
@@ -35,6 +36,16 @@ app.use(
   )
 );
 
+// ── Debug ────────────────────────────────────────
+app.get("/debug", (req, res) => {
+  try {
+    const files = readdirSync(join(__dirname, "node_modules/@mercuryworkshop/scramjet"), { recursive: true });
+    res.json(files);
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 // ── HTTP server ────────────────────────────────
 const server = createServer(app);
 
@@ -44,16 +55,6 @@ server.on("upgrade", (req, socket, head) => {
     wisp.routeRequest(req, socket, head);
   } else {
     socket.destroy();
-  }
-});
-import { readdirSync } from "fs";
-
-app.get("/debug", (req, res) => {
-  try {
-    const files = readdirSync(join(__dirname, "node_modules/@mercuryworkshop/scramjet"), { recursive: true });
-    res.json(files);
-  } catch(e) {
-    res.json({ error: e.message });
   }
 });
 
