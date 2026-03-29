@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neptune — Browser</title>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+
+<!-- Scramjet + bare-mux + libcurl transport -->
+<script src="/baremux/bare.cjs"></script>
+<script src="/libcurl/index.js"></script>
+<script src="/scramjet/scramjet.codecs.js"></script>
+<script src="/scramjet/scramjet.shared.js"></script>
+<script src="/scramjet/scramjet.client.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --pri: #0af; --sec: #06f; --ter: #0df;
+  --bg: #000; --surface: rgba(0,10,30,0.7); --border: rgba(0,170,255,0.25);
+}
+body {
+  background: var(--bg); font-family: 'Silkscreen', monospace; color: var(--pri);
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden; cursor: none; user-select: none;
+}
+/* ── CURSOR ── */
+#cursor-dot {
+  position: fixed; width: 8px; height: 8px; background: var(--pri); border-radius: 50%;
+  pointer-events: none; z-index: 999999; box-shadow: 0 0 8px var(--pri), 0 0 20px var(--sec); mix-blend-mode: screen;
+}
+#cursor-ring {
+  position: fixed; width: 36px; height: 36px; border: 2px solid rgba(0,170,255,0.5); border-radius: 50%;
+  pointer-events: none; z-index: 999998; mix-blend-mode: screen;
+  transition: width 0.2s, height 0.2s, border-color 0.2s;
+}
+#cursor-ring.hover { width: 50px; height: 50px; border-color: var(--pri); box-shadow: 0 0 12px var(--pri); }
+/* ── OVERLAYS ── */
+#scanline {
+  position: fixed; inset: 0; pointer-events: none; z-index: 99990;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 6px);
+}
+#vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 99989;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+}
+/* ── CANVAS ── */
+#canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+/* ── CHROME ── */
+#chrome {
+  position: relative; z-index: 100; display: flex; flex-direction: column;
+  background: rgba(0,5,20,0.97); border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px); flex-shrink: 0;
+}
+/* ── TABS ── */
+#tab-bar {
+  display: flex; align-items: flex-end; padding: 8px 8px 0; gap: 4px;
+  overflow-x: auto; scrollbar-width: none;
+}
+#tab-bar::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px 8px;
+  background: rgba(0,10,30,0.5); border: 1.5px solid var(--border); border-bottom: none;
+  border-radius: 10px 10px 0 0; font-size: 9px; letter-spacing: 1px;
+  color: rgba(0,170,255,0.45); cursor: pointer; min-width: 120px; max-width: 190px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background 0.2s, color 0.2s, border-color 0.2s; flex-shrink: 0;
+}
+.tab:hover { color: var(--pri); border-color: rgba(0,170,255,0.4); }
+.tab.active {
+  background: rgba(0,20,50,0.9); color: var(--pri); border-color: var(--pri);
+  box-shadow: 0 0 10px rgba(0,170,255,0.2), inset 0 1px 0 rgba(0,170,255,0.15);
+}
+.tab-fav { font-size: 8px; flex-shrink: 0; }
+.tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tab-x {
+  width: 14px; height: 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: rgba(0,170,255,0.4); transition: background 0.15s, color 0.15s; flex-shrink: 0;
+}
+.tab-x:hover { background: rgba(255,50,50,0.3); color: #f55; }
+#new-tab-btn {
+  width: 32px; height: 32px; border: 1.5px solid var(--border); border-bottom: none;
+  border-radius: 10px 10px 0 0; background: rgba(0,10,30,0.3); color: rgba(0,170,255,0.5);
+  font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+}
+#new-tab-btn:hover { color: var(--pri); border-color: rgba(0,170,255,0.4); background: rgba(0,20,50,0.6); }
+/* ── TOOLBAR ── */
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px 10px; }
+.nav-btn {
+  width: 34px; height: 34px; border: 1.5px solid var(--border); border-radius: 50%;
+  background: var(--surface); color: rgba(0,170,255,0.5); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; font-size: 14px; transition: all 0.2s; flex-shrink: 0;
+}
+.nav-btn:hover:not(:disabled) { color: var(--pri); border-color: var(--pri); box-shadow: 0 0 8px rgba(0,170,255,0.3); }
+.nav-btn:disabled { opacity: 0.22; cursor: not-allowed; }
+.nav-btn.spin { animation: spinOnce 0.45s ease; }
+@keyframes spinOnce { to { transform: rotate(360deg); } }
+/* ── ADDRESS BAR ── */
+#addr-wrap { flex: 1; position: relative; display: flex; align-items: center; }
+#lock-icon { position: absolute; left: 12px; font-size: 11px; color: rgba(0,170,255,0.4); pointer-events: none; }
+#addr {
+  width: 100%; background: rgba(0,10,30,0.6); border: 1.5px solid var(--border); border-radius: 20px;
+  padding: 8px 40px 8px 32px; font-family: 'Silkscreen', monospace; font-size: 11px; color: var(--pri);
+  letter-spacing: 0.5px; outline: none; caret-color: var(--pri);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+#addr:focus { border-color: var(--pri); box-shadow: 0 0 12px rgba(0,170,255,0.3); background: rgba(0,15,40,0.85); }
+#addr::placeholder { color: rgba(0,170,255,0.3); }
+#go-btn {
+  position: absolute; right: 8px; width: 26px; height: 26px; border: none; border-radius: 50%;
+  background: rgba(0,170,255,0.15); color: var(--pri); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+}
+#go-btn:hover { background: rgba(0,170,255,0.3); box-shadow: 0 0 8px rgba(0,170,255,0.4); }
+/* ── PROGRESS BAR ── */
+#prog {
+  height: 2px; background: linear-gradient(90deg, var(--sec), var(--pri), var(--ter));
+  box-shadow: 0 0 8px var(--pri); width: 0%; transition: width 0.3s ease, opacity 0.4s ease; opacity: 0;
+}
+#prog.on { opacity: 1; }
+/* ── VIEWPORT ── */
+#viewport { flex: 1; position: relative; z-index: 1; overflow: hidden; }
+#proxy-frame { width: 100%; height: 100%; border: none; background: #fff; display: none; }
+/* ── NEW TAB PAGE ── */
+#newtab {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px;
+}
+#newtab.hidden { display: none; }
+#nt-logo {
+  font-size: clamp(36px, 7vw, 72px); letter-spacing: 4px;
+  background: linear-gradient(90deg, var(--pri), var(--sec), var(--ter), var(--pri));
+  background-size: 400% 400%;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: gradShift 6s ease infinite, neonFlicker 3s infinite;
+  filter: drop-shadow(0 0 8px var(--pri)) drop-shadow(0 0 20px var(--sec));
+}
+@keyframes gradShift { 0%{background-position:0%50%}50%{background-position:100%50%}100%{background-position:0%50%} }
+@keyframes neonFlicker { 0%,18%,22%,25%,53%,57%,100%{opacity:1}20%,24%,55%{opacity:.85} }
+#nt-sub {
+  font-size: 10px; letter-spacing: 5px; color: var(--sec);
+  text-shadow: 0 0 6px var(--sec); margin-top: -20px; opacity: 0.7;
+}
+#nt-search {
+  display: flex; align-items: center; border: 2px solid var(--pri); border-radius: 2rem; padding: 4px;
+  background: rgba(0,10,30,0.5); backdrop-filter: blur(8px);
+  box-shadow: 0 0 16px rgba(0,170,255,0.25), 0 0 40px rgba(0,100,255,0.1);
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+#nt-search:focus-within { border-color: var(--ter); box-shadow: 0 0 20px rgba(0,170,255,0.45); }
+#nt-input {
+  all: unset; color: var(--pri); padding: 0 1rem; font-size: 14px;
+  font-family: 'Silkscreen', monospace; width: 260px; caret-color: var(--pri); transition: width 0.3s;
+}
+#nt-input:focus { width: 320px; }
+#nt-input::placeholder { color: rgba(0,170,255,0.35); }
+#nt-go {
+  all: unset; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; color: var(--pri); font-size: 18px; border-radius: 50%; transition: color 0.2s, transform 0.2s;
+}
+#nt-go:hover { color: var(--ter); transform: scale(1.15); }
+#quick-links { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 580px; }
+.qlink {
+  padding: 8px 16px; font-size: 9px; letter-spacing: 2px; border: 1.5px solid rgba(0,100,255,0.3);
+  border-radius: 20px; color: var(--sec); background: rgba(0,10,30,0.5); backdrop-filter: blur(6px);
+  cursor: pointer; transition: all 0.25s;
+}
+.qlink:hover { color: var(--pri); border-color: var(--pri); box-shadow: 0 0 10px rgba(0,170,255,0.3); transform: translateY(-2px); }
+/* ── SW STATUS BADGE ── */
+#sw-badge {
+  position: fixed; bottom: 12px; right: 12px; font-size: 8px; letter-spacing: 1px;
+  padding: 5px 12px; border: 1px solid rgba(0,100,255,0.3); border-radius: 12px;
+  background: rgba(0,5,20,0.8); color: rgba(0,170,255,0.4); z-index: 9999;
+  transition: color 0.4s, border-color 0.4s;
+}
+#sw-badge.ready { color: #0e6; border-color: #0e6; }
+#sw-badge.error { color: #f44; border-color: #f44; }
+/* ── ERROR PAGE ── */
+#err-page {
+  position: absolute; inset: 0; display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; z-index: 3;
+}
+#err-page.show { display: flex; }
+#err-code { font-size: clamp(48px, 8vw, 80px); color: var(--pri); filter: drop-shadow(0 0 12px var(--pri)); }
+#err-msg { font-size: 11px; letter-spacing: 3px; color: var(--sec); opacity: 0.7; text-align: center; max-width: 400px; line-height: 2; }
+#err-retry {
+  padding: 10px 24px; border: 1.5px solid var(--pri); border-radius: 20px;
+  background: rgba(0,10,30,0.5); color: var(--pri); font-family: 'Silkscreen', monospace;
+  font-size: 10px; letter-spacing: 2px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(6px);
+}
+#err-retry:hover { box-shadow: 0 0 12px var(--pri); transform: scale(1.05); }
+/* ── STATUS BAR ── */
+#status {
+  position: fixed; bottom: 0; left: 0; font-size: 8px; letter-spacing: 1px;
+  color: rgba(0,170,255,0.3); padding: 4px 12px; z-index: 200; pointer-events: none;
+  white-space: nowrap; overflow: hidden; max-width: 50%; text-overflow: ellipsis;
+}
+/* ── CLICK BURST ── */
+.burst { position: fixed; width: 4px; height: 4px; border-radius: 50%; background: var(--pri); pointer-events: none; z-index: 99998; }
+/* ── THEMES ── */
+body.c { --pri:#f44;--sec:#a00;--ter:#f88; }
+body.e { --pri:#0e6;--sec:#093;--ter:#4fa; }
+body.v { --pri:#a6f;--sec:#63c;--ter:#c8f; }
+body.a { --pri:#fa0;--sec:#c70;--ter:#fd4; }
+</style>
+</head>
+<body>
+
+<div id="cursor-dot"></div>
+<div id="cursor-ring"></div>
+<div id="scanline"></div>
+<div id="vignette"></div>
+<canvas id="canvas"></canvas>
+<div id="status"></div>
+<div id="sw-badge">PROXY: INIT</div>
+
+<!-- CHROME -->
+<div id="chrome">
+  <div id="tab-bar">
+    <div id="new-tab-btn">+</div>
+  </div>
+  <div id="toolbar">
+    <button class="nav-btn" id="back-btn" disabled>&#8592;</button>
+    <button class="nav-btn" id="fwd-btn" disabled>&#8594;</button>
+    <button class="nav-btn" id="reload-btn">&#8635;</button>
+    <button class="nav-btn" id="home-btn" title="Home">⌂</button>
+    <div id="addr-wrap">
+      <span id="lock-icon">🔒</span>
+      <input id="addr" type="text" placeholder="search or enter a url..." autocomplete="off" spellcheck="false">
+      <button id="go-btn">→</button>
+    </div>
+  </div>
+  <div id="prog"></div>
+</div>
+
+<!-- VIEWPORT -->
+<div id="viewport">
+  <!-- New tab page -->
+  <div id="newtab">
+    <div id="nt-logo">neptune</div>
+    <div id="nt-sub">select your destination</div>
+    <div id="nt-search">
+      <input id="nt-input" type="text" placeholder="search or enter a url..." autocomplete="off" spellcheck="false">
+      <button id="nt-go">→</button>
+    </div>
+    <div id="quick-links">
+      <span class="qlink" data-url="https://www.google.com">GOOGLE</span>
+      <span class="qlink" data-url="https://www.youtube.com">YOUTUBE</span>
+      <span class="qlink" data-url="https://www.reddit.com">REDDIT</span>
+      <span class="qlink" data-url="https://www.wikipedia.org">WIKIPEDIA</span>
+      <span class="qlink" data-url="https://www.github.com">GITHUB</span>
+      <span class="qlink" data-url="index.html">← HOME</span>
+    </div>
+  </div>
+  <!-- Error page -->
+  <div id="err-page">
+    <div id="err-code">ERR</div>
+    <div id="err-msg">SIGNAL LOST<br>THE PAGE COULD NOT BE LOADED<br>CHECK THAT THE PROXY SERVER IS RUNNING</div>
+    <button id="err-retry">RETRY</button>
+  </div>
+  <!-- Proxy iframe -->
+  <iframe id="proxy-frame"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock allow-downloads">
+  </iframe>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  THEMES (sync with homepage via localStorage)
+// ═══════════════════════════════════════════
+const THEMES = [
+  { cls:'',  pri:'#0af', sec:'#06f', ter:'#0df', r:[0,170,255], r2:[0,100,255] },
+  { cls:'c', pri:'#f44', sec:'#a00', ter:'#f88', r:[255,68,68],  r2:[170,0,0] },
+  { cls:'e', pri:'#0e6', sec:'#093', ter:'#4fa', r:[0,230,100],  r2:[0,153,51] },
+  { cls:'v', pri:'#a6f', sec:'#63c', ter:'#c8f', r:[170,100,255],r2:[100,50,200] },
+  { cls:'a', pri:'#fa0', sec:'#c70', ter:'#fd4', r:[255,170,0],  r2:[200,120,0] },
+];
+let ti = parseInt(localStorage.getItem('neptuneTheme') || '0');
+function applyTheme(i) {
+  ti = ((i % THEMES.length) + THEMES.length) % THEMES.length;
+  document.body.className = THEMES[ti].cls;
+}
+applyTheme(ti);
+function theme() { return THEMES[ti]; }
+
+// ═══════════════════════════════════════════
+//  CURSOR
+// ═══════════════════════════════════════════
+const dot  = document.getElementById('cursor-dot');
+const ring = document.getElementById('cursor-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove', e => {
+  mx=e.clientX; my=e.clientY;
+  dot.style.left=mx-4+'px'; dot.style.top=my-4+'px';
+});
+(function anim() {
+  rx+=(mx-rx)*.15; ry+=(my-ry)*.15;
+  ring.style.left=rx-18+'px'; ring.style.top=ry-18+'px';
+  requestAnimationFrame(anim);
+})();
+const HOVER_SEL = 'button,a,.tab,.qlink,.nav-btn,#go-btn,#new-tab-btn,#addr,#nt-input,#nt-go,#err-retry,.nav-btn';
+document.addEventListener('mouseover', e => { if(e.target.closest(HOVER_SEL)) ring.classList.add('hover'); });
+document.addEventListener('mouseout',  e => { if(e.target.closest(HOVER_SEL)) ring.classList.remove('hover'); });
+
+// ═══════════════════════════════════════════
+//  CLICK BURST
+// ═══════════════════════════════════════════
+document.addEventListener('click', e => {
+  const t = theme();
+  for(let i=0;i<10;i++){
+    const s=document.createElement('div'); s.className='burst';
+    s.style.cssText=`left:${e.clientX}px;top:${e.clientY}px;background:${t.pri}`;
+    const angle=(Math.PI*2/10)*i, dist=25+Math.random()*40;
+    s.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${Math.cos(angle)*dist}px,${Math.sin(angle)*dist}px) scale(0)`,opacity:0}],{duration:500,easing:'cubic-bezier(0,.8,.5,1)'});
+    document.body.appendChild(s); setTimeout(()=>s.remove(),600);
+  }
+});
+
+// ═══════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════
+const canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+let particles=[], pmx=0, pmy=0;
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
+window.addEventListener('resize',resize); resize();
+document.addEventListener('mousemove',e=>{pmx=e.clientX;pmy=e.clientY;});
+function mkP(){return{x:Math.random()*canvas.width,y:Math.random()*canvas.height,vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,sz:Math.random()*2.5+1,alpha:0,maxA:.2+Math.random()*.4,life:0,maxLife:600+Math.random()*800};}
+function drawP(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const t=theme();
+  while(particles.length<120)particles.push(mkP());
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];p.life++;
+    p.alpha=p.life<60?(p.life/60)*p.maxA:p.life>p.maxLife-60?((p.maxLife-p.life)/60)*p.maxA:p.maxA;
+    if(p.life>=p.maxLife){particles.splice(i,1);continue;}
+    const dm=Math.hypot(p.x-pmx,p.y-pmy);
+    if(dm<100){const f=(100-dm)/100*.25;p.vx+=(p.x-pmx)/dm*f;p.vy+=(p.y-pmy)/dm*f;}
+    p.vx*=.99;p.vy*=.99;p.x+=p.vx;p.y+=p.vy;
+    if(p.x<-10)p.x=canvas.width+10;if(p.x>canvas.width+10)p.x=-10;
+    if(p.y<-10)p.y=canvas.height+10;if(p.y>canvas.height+10)p.y=-10;
+    ctx.save();ctx.globalAlpha=p.alpha;
+    const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.sz*2);
+    g.addColorStop(0,`rgba(${t.r[0]},${t.r[1]},${t.r[2]},1)`);
+    g.addColorStop(1,`rgba(${t.r2[0]},${t.r2[1]},${t.r2[2]},0)`);
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.sz*2,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+  ctx.lineWidth=.4;
+  for(let i=0;i<particles.length;i++)for(let j=i+1;j<particles.length;j++){
+    const d=Math.hypot(particles[i].x-particles[j].x,particles[i].y-particles[j].y);
+    if(d<130){ctx.strokeStyle=`rgba(${t.r[0]},${t.r[1]},${t.r[2]},${(1-d/130)*.12})`;ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);ctx.stroke();}
+  }
+  requestAnimationFrame(drawP);
+}
+drawP();
+
+// ═══════════════════════════════════════════
+//  SCRAMJET INIT
+// ═══════════════════════════════════════════
+const badge = document.getElementById('sw-badge');
+const SCRAMJET_PREFIX = '/scramjet/';
+const WISP_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/wisp/';
+
+let controller = null;
+let swReady = false;
+
+async function initScramjet() {
+  try {
+    // Set up bare-mux with libcurl transport (encrypted, uses Wisp)
+    const { BareMux } = window;
+    const { LibcurlConnection } = window;
+
+    if (BareMux && LibcurlConnection) {
+      await BareMux.SetTransport('LibcurlConnection', { wisp: WISP_URL });
+    }
+
+    // Register Scramjet service worker
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.register('/scramjet/sw.js', {
+        scope: SCRAMJET_PREFIX,
+      });
+
+      await navigator.serviceWorker.ready;
+
+      // Init ScramjetController
+      controller = new ScramjetController({
+        prefix: SCRAMJET_PREFIX,
+        files: {
+          wasm: '/scramjet/scramjet.wasm.js',
+          worker: '/scramjet/scramjet.worker.js',
+          client: '/scramjet/scramjet.client.js',
+          shared: '/scramjet/scramjet.shared.js',
+          sync: '/scramjet/scramjet.sync.js',
+        },
+      });
+
+      await controller.init();
+
+      swReady = true;
+      badge.textContent = 'PROXY: READY';
+      badge.classList.add('ready');
+      console.log('[Neptune] Scramjet ready ✓');
+    } else {
+      throw new Error('Service workers not supported');
+    }
+  } catch (err) {
+    console.error('[Neptune] Scramjet init failed:', err);
+    badge.textContent = 'PROXY: ERROR';
+    badge.classList.add('error');
+  }
+}
+
+initScramjet();
+
+// ═══════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════
+let tabs = [], activeId = null, tabIdN = 0;
+
+function mkTab(url='') {
+  const id = ++tabIdN;
+  tabs.push({ id, url, title:'NEW TAB', hist:[], histIdx:-1 });
+  renderTabs();
+  switchTab(id);
+  if(url) navigate(url);
+  return id;
+}
+function closeTab(id) {
+  const idx = tabs.findIndex(t=>t.id===id);
+  tabs = tabs.filter(t=>t.id!==id);
+  if(!tabs.length) { mkTab(); return; }
+  if(activeId===id) switchTab(tabs[Math.min(idx,tabs.length-1)].id);
+  renderTabs();
+}
+function switchTab(id) {
+  activeId=id; renderTabs();
+  const tab=getTab();
+  if(!tab)return;
+  updateAddr(tab.url);
+  updateNavBtns(tab);
+  tab.url ? showFrame(tab.url) : showNewTab();
+}
+function getTab() { return tabs.find(t=>t.id===activeId); }
+
+function renderTabs() {
+  const bar=document.getElementById('tab-bar');
+  const btn=document.getElementById('new-tab-btn');
+  bar.querySelectorAll('.tab').forEach(e=>e.remove());
+  tabs.forEach(tab=>{
+    const el=document.createElement('div');
+    el.className='tab'+(tab.id===activeId?' active':'');
+    el.innerHTML=`<span class="tab-fav">◈</span><span class="tab-title">${esc(tab.title)}</span><span class="tab-x" data-x="${tab.id}">✕</span>`;
+    el.addEventListener('click', e=>{
+      if(e.target.dataset.x){closeTab(parseInt(e.target.dataset.x));return;}
+      switchTab(tab.id);
+    });
+    bar.insertBefore(el, btn);
+  });
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+// ═══════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════
+const frame    = document.getElementById('proxy-frame');
+const addrEl   = document.getElementById('addr');
+const progEl   = document.getElementById('prog');
+const statusEl = document.getElementById('status');
+const ntPage   = document.getElementById('newtab');
+const errPage  = document.getElementById('err-page');
+const backBtn  = document.getElementById('back-btn');
+const fwdBtn   = document.getElementById('fwd-btn');
+const reloadBtn= document.getElementById('reload-btn');
+
+function smartUrl(raw) {
+  raw = raw.trim();
+  if(!raw) return '';
+  if(/^https?:\/\//i.test(raw)) return raw;
+  if(/^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(raw)) return 'https://'+raw;
+  return 'https://www.google.com/search?q='+encodeURIComponent(raw);
+}
+
+function proxyUrl(url) {
+  if(swReady && controller) {
+    try { return controller.encodeUrl(url); } catch(e) {}
+  }
+  // Fallback — direct (won't proxy cross-origin but won't crash)
+  return url;
+}
+
+function navigate(rawUrl) {
+  const url = smartUrl(rawUrl);
+  if(!url) return;
+  const tab=getTab(); if(!tab) return;
+  tab.url=url;
+  tab.hist=tab.hist.slice(0,tab.histIdx+1);
+  tab.hist.push(url);
+  tab.histIdx=tab.hist.length-1;
+  updateAddr(url);
+  updateNavBtns(tab);
+  showFrame(url);
+}
+
+function showFrame(url) {
+  ntPage.classList.add('hidden');
+  errPage.classList.remove('show');
+  frame.style.display='block';
+  startProg();
+  frame.src = proxyUrl(url);
+  statusEl.textContent = url;
+}
+
+function showNewTab() {
+  ntPage.classList.remove('hidden');
+  errPage.classList.remove('show');
+  frame.style.display='none';
+  frame.src='about:blank';
+  addrEl.value='';
+  statusEl.textContent='';
+}
+
+let progTimer;
+function startProg() {
+  let w=0; progEl.style.width='0%'; progEl.classList.add('on');
+  clearInterval(progTimer);
+  progTimer=setInterval(()=>{ w=Math.min(w+Math.random()*10,85); progEl.style.width=w+'%'; },200);
+}
+function endProg() {
+  clearInterval(progTimer);
+  progEl.style.width='100%';
+  setTimeout(()=>{ progEl.classList.remove('on'); progEl.style.width='0%'; },400);
+}
+
+frame.addEventListener('load', ()=>{
+  endProg();
+  const tab=getTab(); if(!tab)return;
+  let title='PAGE';
+  try{ title=(frame.contentDocument?.title||'PAGE').substring(0,20).toUpperCase(); }catch(e){}
+  tab.title=title; renderTabs();
+  errPage.classList.remove('show');
+});
+frame.addEventListener('error', ()=>{
+  endProg(); ntPage.classList.add('hidden'); frame.style.display='none'; errPage.classList.add('show');
+});
+
+function updateAddr(url) {
+  addrEl.value=url||'';
+  const lock=document.getElementById('lock-icon');
+  lock.textContent=/^https:/i.test(url)?'🔒':/^http:/i.test(url)?'⚠':'🔒';
+}
+function updateNavBtns(tab) {
+  backBtn.disabled=!tab||tab.histIdx<=0;
+  fwdBtn.disabled=!tab||tab.histIdx>=tab.hist.length-1;
+}
+
+// ═══════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════
+backBtn.addEventListener('click',()=>{
+  const t=getTab(); if(!t||t.histIdx<=0)return;
+  t.histIdx--; t.url=t.hist[t.histIdx];
+  updateAddr(t.url); updateNavBtns(t); showFrame(t.url);
+});
+fwdBtn.addEventListener('click',()=>{
+  const t=getTab(); if(!t||t.histIdx>=t.hist.length-1)return;
+  t.histIdx++; t.url=t.hist[t.histIdx];
+  updateAddr(t.url); updateNavBtns(t); showFrame(t.url);
+});
+reloadBtn.addEventListener('click',()=>{
+  reloadBtn.classList.add('spin'); setTimeout(()=>reloadBtn.classList.remove('spin'),450);
+  const t=getTab(); if(t?.url) showFrame(t.url);
+});
+document.getElementById('home-btn').addEventListener('click',()=>{ window.location.href='index.html'; });
+document.getElementById('new-tab-btn').addEventListener('click',()=>mkTab());
+addrEl.addEventListener('keydown',e=>{ if(e.key==='Enter') navigate(addrEl.value); });
+addrEl.addEventListener('focus',()=>addrEl.select());
+document.getElementById('go-btn').addEventListener('click',()=>navigate(addrEl.value));
+document.getElementById('nt-input').addEventListener('keydown',e=>{ if(e.key==='Enter') navigate(document.getElementById('nt-input').value); });
+document.getElementById('nt-go').addEventListener('click',()=>navigate(document.getElementById('nt-input').value));
+document.querySelectorAll('.qlink').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.url)));
+document.getElementById('err-retry').addEventListener('click',()=>{ const t=getTab(); if(t?.url) showFrame(t.url); });
+
+// ═══════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════
+document.addEventListener('keydown', e=>{
+  const typing = document.activeElement===addrEl || document.activeElement===document.getElementById('nt-input');
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='t'){e.preventDefault();mkTab();}
+    if(e.key==='w'){e.preventDefault();if(activeId)closeTab(activeId);}
+    if(e.key==='l'){e.preventDefault();addrEl.focus();addrEl.select();}
+    if(e.key==='r'){e.preventDefault();reloadBtn.click();}
+    const n=parseInt(e.key);
+    if(n>=1&&n<=9&&tabs[n-1]){e.preventDefault();switchTab(tabs[n-1].id);}
+  }
+  if(e.key==='Escape'&&typing) document.activeElement.blur();
+});
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+mkTab();
+</script>
+</body>
+</html>
