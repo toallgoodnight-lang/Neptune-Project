@@ -9,8 +9,7 @@
 <!-- Scramjet + bare-mux + libcurl transport -->
 <script src="/baremux/bare.cjs"></script>
 <script src="/libcurl/index.js"></script>
-<script src="/scramjet/scramjet.bundle.js"></script>
-<script src="/scramjet/scramjet.sync.js"></script>
+<script type="module" src="/scramjet/scramjet.all.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -265,7 +264,7 @@ body.a { --pri:#fa0;--sec:#c70;--ter:#fd4; }
 
 <script>
 // ═══════════════════════════════════════════
-//  THEMES (sync with homepage via localStorage)
+//  THEMES
 // ═══════════════════════════════════════════
 const THEMES = [
   { cls:'',  pri:'#0af', sec:'#06f', ter:'#0df', r:[0,170,255], r2:[0,100,255] },
@@ -372,8 +371,9 @@ async function initScramjet() {
     }
 
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.register('/scramjet/scramjet.bundle.js', {
+      await navigator.serviceWorker.register('/scramjet/scramjet.all.js', {
         scope: SCRAMJET_PREFIX,
+        type: 'module',
       });
 
       await navigator.serviceWorker.ready;
@@ -382,9 +382,9 @@ async function initScramjet() {
         prefix: SCRAMJET_PREFIX,
         files: {
           wasm: '/scramjet/scramjet.wasm.wasm',
-          worker: '/scramjet/scramjet.bundle.js',
-          client: '/scramjet/scramjet.bundle.js',
-          shared: '/scramjet/scramjet.bundle.js',
+          worker: '/scramjet/scramjet.all.js',
+          client: '/scramjet/scramjet.all.js',
+          shared: '/scramjet/scramjet.all.js',
           sync: '/scramjet/scramjet.sync.js',
         },
       });
@@ -404,6 +404,8 @@ async function initScramjet() {
     badge.classList.add('error');
   }
 }
+
+initScramjet();
 
 // ═══════════════════════════════════════════
 //  TABS
@@ -477,7 +479,6 @@ function proxyUrl(url) {
   if(swReady && controller) {
     try { return controller.encodeUrl(url); } catch(e) {}
   }
-  // Fallback — direct (won't proxy cross-origin but won't crash)
   return url;
 }
 
