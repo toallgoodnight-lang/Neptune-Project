@@ -9,9 +9,8 @@
 <!-- Scramjet + bare-mux + libcurl transport -->
 <script src="/baremux/bare.cjs"></script>
 <script src="/libcurl/index.js"></script>
-<script src="/scramjet/scramjet.codecs.js"></script>
-<script src="/scramjet/scramjet.shared.js"></script>
-<script src="/scramjet/scramjet.client.js"></script>
+<script src="/scramjet/scramjet.bundle.js"></script>
+<script src="/scramjet/scramjet.sync.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -365,7 +364,6 @@ let swReady = false;
 
 async function initScramjet() {
   try {
-    // Set up bare-mux with libcurl transport (encrypted, uses Wisp)
     const { BareMux } = window;
     const { LibcurlConnection } = window;
 
@@ -373,22 +371,20 @@ async function initScramjet() {
       await BareMux.SetTransport('LibcurlConnection', { wisp: WISP_URL });
     }
 
-    // Register Scramjet service worker
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.register('/scramjet/sw.js', {
+      const reg = await navigator.serviceWorker.register('/scramjet/scramjet.bundle.js', {
         scope: SCRAMJET_PREFIX,
       });
 
       await navigator.serviceWorker.ready;
 
-      // Init ScramjetController
       controller = new ScramjetController({
         prefix: SCRAMJET_PREFIX,
         files: {
-          wasm: '/scramjet/scramjet.wasm.js',
-          worker: '/scramjet/scramjet.worker.js',
-          client: '/scramjet/scramjet.client.js',
-          shared: '/scramjet/scramjet.shared.js',
+          wasm: '/scramjet/scramjet.wasm.wasm',
+          worker: '/scramjet/scramjet.bundle.js',
+          client: '/scramjet/scramjet.bundle.js',
+          shared: '/scramjet/scramjet.bundle.js',
           sync: '/scramjet/scramjet.sync.js',
         },
       });
@@ -408,8 +404,6 @@ async function initScramjet() {
     badge.classList.add('error');
   }
 }
-
-initScramjet();
 
 // ═══════════════════════════════════════════
 //  TABS
