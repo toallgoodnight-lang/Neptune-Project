@@ -46,6 +46,16 @@ server.on("upgrade", (req, socket, head) => {
     socket.destroy();
   }
 });
+import { readdirSync } from "fs";
+
+app.get("/debug", (req, res) => {
+  try {
+    const files = readdirSync(join(__dirname, "node_modules/@mercuryworkshop/scramjet"), { recursive: true });
+    res.json(files);
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
 
 server.listen(PORT, () => {
   console.log(`\n  ╔══════════════════════════════╗`);
