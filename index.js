@@ -1,20 +1,20 @@
 import { createServer } from "http";
-import { createRequire } from "module";
 import express from "express";
 import { fileURLToPath } from "url";
 import { join, dirname } from "path";
-import { routeRequest } from "@mercuryworkshop/wisp-js/server";
 
-const require = createRequire(import.meta.url);
+// ✅ correct modern import
+import wisp from "@mercuryworkshop/wisp-js/server";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ── Serve static frontend ──────────────────────────────────
+// ── Static frontend ─────────────────────────────
 app.use(express.static(join(__dirname, "public")));
 
-// ── Serve Scramjet dist files at /scramjet/ ───────────────
+// ── Scramjet ────────────────────────────────────
 app.use(
   "/scramjet/",
   express.static(
@@ -22,7 +22,7 @@ app.use(
   )
 );
 
-// ── Serve bare-mux at /baremux/ ───────────────────────────
+// ── Bare-mux ────────────────────────────────────
 app.use(
   "/baremux/",
   express.static(
@@ -30,7 +30,7 @@ app.use(
   )
 );
 
-// ── Serve libcurl transport at /libcurl/ ──────────────────
+// ── Libcurl ─────────────────────────────────────
 app.use(
   "/libcurl/",
   express.static(
@@ -38,15 +38,16 @@ app.use(
   )
 );
 
-// ── HTTP server ────────────────────────────────────────────
+// ── HTTP server ────────────────────────────────
 const server = createServer(app);
 
-// ── Wisp WebSocket handler (replaces bare server) ─────────
+// ── ✅ Wisp WebSocket handler (FIXED) ───────────
 server.on("upgrade", (req, socket, head) => {
   if (req.url.startsWith("/wisp/")) {
-    routeRequest(req, socket, head);
+    // ✅ modern usage: call wisp directly
+    wisp(req, socket, head);
   } else {
-    socket.end();
+    socket.destroy();
   }
 });
 
