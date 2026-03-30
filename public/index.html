@@ -242,7 +242,8 @@ body.a { --pri:#fa0;--sec:#c70;--ter:#fd4; }
 </div>
 
 <script type="module">
-import { ScramjetController } from '/scramjet/scramjet.all.js';
+import * as Scramjet from '/scramjet/scramjet.all.js';
+const ScramjetController = Scramjet.ScramjetController ?? Scramjet.default ?? Scramjet;
 
 // ═══════════════════════════════════════════
 //  THEMES
