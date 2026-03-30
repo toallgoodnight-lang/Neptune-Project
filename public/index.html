@@ -10,6 +10,10 @@
 <script src="/libcurl/index.js"></script>
 <script src="/scramjet/scramjet.all.js"></script>
 <script src="/scramjet/scramjet.sync.js"></script>
+<script>
+  console.log('Scramjet globals:', Object.keys(window).filter(k => k.toLowerCase().includes('scramjet')));
+  console.log('All new globals:', Object.keys(window));
+</script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
