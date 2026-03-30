@@ -243,6 +243,8 @@ body.a { --pri:#fa0;--sec:#c70;--ter:#fd4; }
 
 <script type="module">
 import * as Scramjet from '/scramjet/scramjet.all.js';
+console.log('Scramjet exports:', Object.keys(Scramjet));
+console.log('Scramjet default:', Scramjet.default);
 const ScramjetController = Scramjet.ScramjetController ?? Scramjet.default ?? Scramjet;
 
 // ═══════════════════════════════════════════
