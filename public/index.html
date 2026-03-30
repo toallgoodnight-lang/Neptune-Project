@@ -6,9 +6,10 @@
 <title>Neptune — Browser</title>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
 
-<!-- Scramjet + bare-mux + libcurl transport -->
 <script src="/baremux/bare.cjs"></script>
 <script src="/libcurl/index.js"></script>
+<script src="/scramjet/scramjet.all.js"></script>
+<script src="/scramjet/scramjet.sync.js"></script>
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -241,12 +242,7 @@ body.a { --pri:#fa0;--sec:#c70;--ter:#fd4; }
   </iframe>
 </div>
 
-<script type="module">
-import * as Scramjet from '/scramjet/scramjet.all.js';
-console.log('Scramjet exports:', Object.keys(Scramjet));
-console.log('Scramjet default:', Scramjet.default);
-const ScramjetController = Scramjet.ScramjetController ?? Scramjet.default ?? Scramjet;
-
+<script>
 // ═══════════════════════════════════════════
 //  THEMES
 // ═══════════════════════════════════════════
@@ -357,10 +353,12 @@ async function initScramjet() {
     if ('serviceWorker' in navigator) {
       await navigator.serviceWorker.register('/scramjet/scramjet.all.js', {
         scope: SCRAMJET_PREFIX,
-        type: 'module',
       });
 
       await navigator.serviceWorker.ready;
+
+      const ScramjetController = window.ScramjetController;
+      console.log('ScramjetController:', ScramjetController);
 
       controller = new ScramjetController({
         prefix: SCRAMJET_PREFIX,
