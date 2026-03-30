@@ -343,22 +343,29 @@ let swReady = false;
 
 async function initScramjet() {
   try {
+    console.log('[1] starting init');
     const { BareMux } = window;
     const { LibcurlConnection } = window;
 
     if (BareMux && LibcurlConnection) {
       await BareMux.SetTransport('LibcurlConnection', { wisp: WISP_URL });
+      console.log('[2] transport set');
+    } else {
+      console.log('[2] no BareMux or LibcurlConnection');
     }
 
     if ('serviceWorker' in navigator) {
+      console.log('[3] registering SW');
       await navigator.serviceWorker.register('/scramjet/scramjet.all.js', {
         scope: SCRAMJET_PREFIX,
       });
+      console.log('[4] SW registered');
 
       await navigator.serviceWorker.ready;
+      console.log('[5] SW ready');
 
       const ScramjetController = await $scramjetLoadController();
-      console.log('ScramjetController:', ScramjetController);
+      console.log('[6] ScramjetController:', ScramjetController);
 
       controller = new ScramjetController({
         prefix: SCRAMJET_PREFIX,
@@ -370,13 +377,14 @@ async function initScramjet() {
           sync: '/scramjet/scramjet.sync.js',
         },
       });
+      console.log('[7] controller created');
 
       await controller.init();
+      console.log('[8] controller init done');
 
       swReady = true;
       badge.textContent = 'PROXY: READY';
       badge.classList.add('ready');
-      console.log('[Neptune] Scramjet ready ✓');
     } else {
       throw new Error('Service workers not supported');
     }
